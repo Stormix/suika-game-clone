@@ -44,7 +44,7 @@ export class BallsContainer extends Entity {
   createBody(): void {
     this.body = this._game.world.createBody({
       type: 'static',
-      position: Vec2(this._game.widthSI / 2, this._game.heightSI / 2)
+      position: Vec2(this._game.widthSI / 2, this._game.heightSI / 4)
     });
 
     // Create Left, Right and bottom walls
@@ -75,6 +75,10 @@ export class BallsContainer extends Entity {
 
   get height() {
     return this._size.y;
+  }
+
+  get position() {
+    return this._game.engine.planckToPixiCoords(this.body!.getPosition());
   }
 
   get widthSI() {

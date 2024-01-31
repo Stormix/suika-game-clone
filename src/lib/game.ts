@@ -1,13 +1,15 @@
 import { EntityCreatePayload, EntityRemovePayload, QueueItem, QueueType } from '@/types/queue';
 import { Container, DisplayObject } from 'pixi.js';
 import { Vec2, World } from 'planck-js';
-import { BALL_TYPES, METERS_TO_PIXELS } from './config';
+import { BALL_TYPES, METERS_TO_PIXELS, OFFSET, SPAWN_POSITION_Y } from './config';
 import { Engine } from './engine';
 import { Ball } from './entities/ball';
 import { BallsContainer } from './entities/balls-container';
 import { Entity } from './entities/entity';
+import { PreviewBall } from './entities/preview-ball';
 import logger from './logger';
 import { Queue } from './queue';
+import { getNextBallType, randomBallType } from './util';
 
 export class Game {
   private _engine: Engine;
@@ -15,6 +17,11 @@ export class Game {
   private _world: World;
   private _entities: Entity[] = [];
   private _queue: Queue<QueueItem> = new Queue();
+  private _nextBall: BALL_TYPES = BALL_TYPES.Cherries;
+  private _currentBall: BALL_TYPES = BALL_TYPES.Cherries;
+  private _hoverBall: PreviewBall | undefined;
+  private _previewBall: PreviewBall | undefined;
+  private _score: number = 0;
 
   constructor(engine: Engine) {
     this._engine = engine;
@@ -28,8 +35,18 @@ export class Game {
   public init(): void {
     logger.info('Game initialized');
 
+    this._nextBall = randomBallType();
+
+    this._previewBall = new PreviewBall(this._nextBall, this, Vec2(this.engine.width - OFFSET, SPAWN_POSITION_Y));
+    this._hoverBall = this._previewBall!.clone({
+      initialPosition: Vec2(this.engine.width / 2, 100)
+    });
+
     this._entities.push(new BallsContainer(Vec2(300, 400), this));
     this._entities.push(new Ball(BALL_TYPES.Cherries, this));
+
+    this._entities.push(this._hoverBall);
+    this._entities.push(this._previewBall);
 
     this._entities.forEach((entity) => {
       entity.init();
@@ -76,9 +93,11 @@ export class Game {
         this._queue.enqueue({
           type: QueueType.EntityCreate,
           payload: {
-            create: (game) => Ball.spawn(game, spawnPosition.x, spawnPosition.y)
+            create: (game) => Ball.spawn(game, spawnPosition.x, spawnPosition.y, getNextBallType(entityA.type))
           }
         });
+
+        this._score += 10;
       }
     });
 
@@ -87,13 +106,50 @@ export class Game {
       const e = event as MouseEvent;
       const position = Vec2(e.offsetX, e.offsetY);
 
+      if (!this.withinXBounds(position)) return;
+
+      this._currentBall = this._nextBall;
+
+      this._nextBall = randomBallType();
+      this._previewBall!.type = this._nextBall;
+      this._hoverBall!.type = this._nextBall;
+
       this._queue.enqueue({
         type: QueueType.EntityCreate,
         payload: {
-          create: (game) => Ball.spawn(game, position.x, position.y)
+          create: (game) => Ball.spawn(game, position.x, SPAWN_POSITION_Y, this._currentBall)
         }
       });
     });
+
+    // On cursor hover
+    this.engine.renderer.view.addEventListener?.('mousemove', (event) => {
+      const e = event as MouseEvent;
+      const position = Vec2(e.offsetX, e.offsetY);
+      if (!this.withinXBounds(position)) return;
+      this._hoverBall!.body?.setPosition(this._engine.pixiToPlanckCoords(Vec2(position.x, SPAWN_POSITION_Y)));
+    });
+  }
+
+  get gameArea() {
+    return {
+      x: this.container.position.x - this.container.width / 2,
+      y: this.container.position.y - this.container.height / 2,
+      width: this.container.width,
+      height: this.container.height
+    };
+  }
+
+  public withinXBounds(position: Vec2): boolean {
+    return position.x > this.gameArea.x && position.x < this.gameArea.x + this.gameArea.width;
+  }
+
+  public withinYBounds(position: Vec2): boolean {
+    return position.y > this.gameArea.y && position.y < this.gameArea.y + this.gameArea.height;
+  }
+
+  public withinBounds(position: Vec2): boolean {
+    return this.withinXBounds(position) && this.withinYBounds(position);
   }
 
   public start(): void {
@@ -181,5 +237,9 @@ export class Game {
 
   get engine() {
     return this._engine;
+  }
+
+  get container() {
+    return this._entities.find((e) => e instanceof BallsContainer) as BallsContainer;
   }
 }

@@ -29,3 +29,6 @@ export const BALL_SIZES: Record<BALL_TYPES, number> = {
   [BALL_TYPES.Melon]: 5,
   [BALL_TYPES.Watermelon]: 5.5
 };
+
+export const OFFSET = 100;
+export const SPAWN_POSITION_Y = 100;
